@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+
+# Data
+backend/data/raw/
+backend/data/processed/
+backend/data/generated/
+backend/data/exports/
+backend/data/logs/
+db/*.db
+db/*.db-wal
+db/*.db-shm
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+.next/
+
+# Docker
+docker-compose.override.yml
+
+# Firebase
+firebase-debug.log
