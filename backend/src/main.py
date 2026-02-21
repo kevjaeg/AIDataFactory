@@ -8,7 +8,7 @@ from loguru import logger
 from config import get_settings
 from logging_config import setup_logging
 from db.database import init_db, close_db
-from api.routes import health
+from api.routes import health, projects
 
 
 @asynccontextmanager
@@ -51,3 +51,4 @@ app.add_middleware(
 
 # Register routers
 app.include_router(health.router)
+app.include_router(projects.router)
