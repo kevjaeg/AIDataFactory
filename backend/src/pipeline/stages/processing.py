@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -49,26 +50,30 @@ def _extract_content(html: str) -> tuple[str | None, dict[str, Any]]:
 
     Returns ``(text, metadata_dict)``.  If trafilatura returns nothing the
     text will be ``None`` (caller should fall back to BS4).
+
+    Uses a single ``output_format="json"`` call to get both text and metadata,
+    falling back to a plain-text call only if JSON parsing fails.
     """
     metadata: dict[str, Any] = {}
+    text: str | None = None
 
-    # Attempt JSON extraction for metadata
     try:
-        import json as _json
-        json_result = trafilatura.extract(html, output_format="json", include_comments=False,
-                                          include_tables=True)
+        json_result = trafilatura.extract(
+            html, output_format="json", include_comments=False, include_tables=True
+        )
         if json_result:
-            metadata = _json.loads(json_result)
+            parsed = json.loads(json_result)
+            text = parsed.get("text")
+            metadata = parsed
     except Exception:
         pass
 
-    # Plain-text extraction
-    text = trafilatura.extract(
-        html,
-        include_comments=False,
-        include_tables=True,
-        output_format="txt",
-    )
+    # Fallback to plain-text extraction if JSON approach failed
+    if text is None:
+        text = trafilatura.extract(
+            html, include_comments=False, include_tables=True, output_format="txt"
+        )
+
     return text, metadata
 
 
@@ -142,24 +147,19 @@ def _deduplicate_chunks(
         try:
             lsh.insert(str(idx), m)
         except ValueError:
-            # duplicate key — this chunk is a near-dup of an already-inserted one
-            pass
+            pass  # identical MinHash signature — handled in removal pass below
 
-    keep_indices: set[int] = set()
+    removed: set[int] = set()
     for idx in range(len(unique_after_exact)):
-        if idx in keep_indices:
+        if idx in removed:
             continue
-        # Query returns all near-duplicates (including self)
         neighbours = lsh.query(minhashes[idx])
-        # Keep only the first (lowest index) in each group
         group = sorted(int(n) for n in neighbours)
-        for g in group:
-            if g not in keep_indices:
-                if g == group[0]:
-                    keep_indices.add(g)
-                # else: skip (near-duplicate)
+        # Keep the first (lowest index), mark rest as near-duplicates
+        for g in group[1:]:
+            removed.add(g)
 
-    unique_final = [unique_after_exact[i] for i in sorted(keep_indices)]
+    unique_final = [c for i, c in enumerate(unique_after_exact) if i not in removed]
     near_removed = len(unique_after_exact) - len(unique_final)
 
     # Re-index
