@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from clients.llm_client import LLMClient
 from clients.redis_client import RedisClient
 from config import get_settings
-from db.models import Export, Job
+from db.models import Export, Job, TrainingExample
 from pipeline.base import StageResult
 from pipeline.stages.export import ShipperStage
 from pipeline.stages.generation import FactoryStage
@@ -202,6 +202,10 @@ class PipelineOrchestrator:
             if stage_name == "factory":
                 total_cost += stage_result.stats.get("total_cost", 0.0)
 
+            # Persist training examples after inspector stage
+            if stage_name == "inspector":
+                await self._persist_examples(job_id, stage_result.data)
+
             logger.info(
                 f"Job {job_id}: stage '{stage_name}' completed "
                 f"({len(stage_result.data)} items)"
@@ -252,6 +256,40 @@ class PipelineOrchestrator:
     # ------------------------------------------------------------------
     # Failure helper
     # ------------------------------------------------------------------
+
+    async def _persist_examples(self, job_id: int, examples: list[dict]) -> None:
+        """Write training examples to the DB after QC for comparison/analytics."""
+        import json
+
+        if not self._session_factory or not examples:
+            return
+
+        def _sanitize_json(obj):
+            """Convert numpy/non-native types to JSON-safe Python types."""
+            return json.loads(json.dumps(obj, default=lambda x: float(x)))
+
+        async with self._session_factory() as session:
+            for ex in examples:
+                quality_details = ex.get("quality_details")
+                if quality_details:
+                    quality_details = _sanitize_json(quality_details)
+                qs = ex.get("quality_score")
+                row = TrainingExample(
+                    chunk_id=0,
+                    job_id=job_id,
+                    template_type=ex.get("template_type", ""),
+                    input_text=ex.get("input", ""),
+                    output_text=ex.get("output", ""),
+                    model_used=ex.get("model_used", ""),
+                    token_count=ex.get("token_count", 0),
+                    cost=float(ex.get("cost", 0.0)),
+                    quality_score=float(qs) if qs is not None else None,
+                    quality_details=quality_details,
+                    passed_qc=ex.get("passed_qc"),
+                )
+                session.add(row)
+            await session.commit()
+        logger.info(f"Job {job_id}: persisted {len(examples)} training examples to DB")
 
     async def _mark_failed(self, job_id: int, error: str) -> None:
         """Set the job status to 'failed' and store the error message."""
