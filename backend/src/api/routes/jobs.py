@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
+from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.schemas import JobCreate, JobResponse
+from clients.redis_client import RedisClient
 from db.database import get_session
 from db.models import Job, Project
 
@@ -33,8 +35,13 @@ async def create_job(
     await session.commit()
     await session.refresh(job)
 
-    # NOTE: In the full system, we'd enqueue to Redis here.
-    # For now, just create the DB record.
+    # Enqueue job to Redis for worker processing
+    try:
+        rc = RedisClient()
+        await rc.enqueue_job(job.id, config_dict)
+        await rc.close()
+    except Exception as exc:
+        logger.warning(f"Failed to enqueue job {job.id}: {exc}")
 
     return job
 
