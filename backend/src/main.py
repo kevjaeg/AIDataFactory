@@ -8,7 +8,8 @@ from loguru import logger
 from config import get_settings
 from logging_config import setup_logging
 from db.database import init_db, close_db
-from api.routes import health, projects, jobs, exports, stream, stats, templates_api, custom_templates, settings
+from api.routes import health, projects, jobs, exports, stream, stats, templates_api, custom_templates
+from api.routes import settings as settings_routes
 
 
 @asynccontextmanager
@@ -51,9 +52,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_origins = get_settings().cors_origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[o.strip() for o in _cors_origins.split(",")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -68,4 +70,4 @@ app.include_router(stream.router)
 app.include_router(stats.router)
 app.include_router(templates_api.router)
 app.include_router(custom_templates.router)
-app.include_router(settings.router)
+app.include_router(settings_routes.router)

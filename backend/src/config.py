@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # Export defaults
     export_format: str = "jsonl"
 
+    # CORS
+    cors_origins: str = "http://localhost:3000"
+
     # HuggingFace
     huggingface_token: str = ""
 

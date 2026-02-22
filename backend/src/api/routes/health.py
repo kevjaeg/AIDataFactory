@@ -5,6 +5,7 @@ router = APIRouter()
 
 
 @router.get("/health")
+@router.get("/api/health")
 async def health_check() -> dict:
     """Health check endpoint with component status."""
     from db.database import _engine

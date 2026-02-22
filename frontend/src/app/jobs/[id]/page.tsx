@@ -2,6 +2,7 @@
 
 import { use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Loader2,
@@ -11,6 +12,7 @@ import {
   XCircle,
   ExternalLink,
   StopCircle,
+  RotateCcw,
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/glass-panel";
 import { Badge } from "@/components/ui/badge";
@@ -45,10 +47,21 @@ export default function JobDetailPage({
   const currentProgress = progress?.progress ?? job?.progress ?? 0;
   const effectiveStatus = progress?.status === "completed" ? "completed" : job?.status ?? "pending";
 
+  const router = useRouter();
+
   const handleCancel = async () => {
     try {
       await api.cancelJob(jobId);
       refetch();
+    } catch {
+      // handle error
+    }
+  };
+
+  const handleRetry = async () => {
+    try {
+      const newJob = await api.retryJob(jobId);
+      router.push(`/jobs/${newJob.id}`);
     } catch {
       // handle error
     }
@@ -107,6 +120,16 @@ export default function JobDetailPage({
               >
                 <StopCircle className="size-4" />
                 Cancel
+              </Button>
+            )}
+            {(job.status === "failed" || job.status === "cancelled") && (
+              <Button
+                onClick={handleRetry}
+                variant="outline"
+                className="border-[rgba(255,140,0,0.3)] text-[#ff8c00] hover:bg-[rgba(255,140,0,0.1)] font-mono text-xs"
+              >
+                <RotateCcw className="size-4" />
+                Retry
               </Button>
             )}
             {job.status === "completed" && (

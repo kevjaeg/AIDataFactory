@@ -83,6 +83,19 @@ class PipelineOrchestrator:
         return mapping.get(stage_name, {})
 
     # ------------------------------------------------------------------
+    # Cancellation check
+    # ------------------------------------------------------------------
+
+    async def _check_cancelled(self, job_id: int) -> bool:
+        """Check if a job has been cancelled. Returns True if cancelled."""
+        if self._session_factory is None:
+            return False
+        async with self._session_factory() as session:
+            result = await session.execute(select(Job).where(Job.id == job_id))
+            job = result.scalar_one_or_none()
+            return job is not None and job.status == "cancelled"
+
+    # ------------------------------------------------------------------
     # Progress publishing
     # ------------------------------------------------------------------
 
@@ -158,6 +171,12 @@ class PipelineOrchestrator:
 
         # --- Run each stage ---
         for stage_name in self.STAGES:
+            # Check for cancellation before starting each stage
+            if await self._check_cancelled(job_id):
+                logger.info(f"Job {job_id}: cancelled before stage '{stage_name}'")
+                await self._publish_progress(job_id, stage_name, 0, "cancelled")
+                return
+
             progress = self.STAGE_PROGRESS[stage_name]
             stage_obj = stages[stage_name]
             stage_config = self._stage_config(stage_name, job)
@@ -201,6 +220,19 @@ class PipelineOrchestrator:
             # Accumulate cost from factory stage
             if stage_name == "factory":
                 total_cost += stage_result.stats.get("total_cost", 0.0)
+
+                # Check cost limit
+                max_cost = (job.config or {}).get("max_cost")
+                if max_cost is not None and total_cost > max_cost:
+                    error_msg = (
+                        f"Cost limit exceeded: ${total_cost:.4f} > ${max_cost:.4f}"
+                    )
+                    logger.warning(f"Job {job_id}: {error_msg}")
+                    await self._mark_failed(job_id, error_msg)
+                    await self._publish_progress(
+                        job_id, "factory", progress, "failed", error=error_msg
+                    )
+                    return
 
             # Persist training examples after inspector stage
             if stage_name == "inspector":

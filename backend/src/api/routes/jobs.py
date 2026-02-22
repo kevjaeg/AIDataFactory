@@ -158,3 +158,39 @@ async def cancel_job(
     await session.commit()
     await session.refresh(job)
     return job
+
+
+@router.post("/api/jobs/{job_id}/retry", status_code=201, response_model=JobResponse)
+async def retry_job(
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> Job:
+    """Retry a failed or cancelled job by creating a new job with the same config."""
+    job = await session.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.status not in ("failed", "cancelled"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only failed or cancelled jobs can be retried (current: {job.status})",
+        )
+
+    new_job = Job(
+        project_id=job.project_id,
+        status="pending",
+        config=job.config,
+    )
+    session.add(new_job)
+    await session.commit()
+    await session.refresh(new_job)
+
+    # Enqueue to Redis
+    try:
+        rc = RedisClient()
+        await rc.enqueue_job(new_job.id, new_job.config)
+        await rc.close()
+    except Exception as exc:
+        logger.warning(f"Failed to enqueue retried job {new_job.id}: {exc}")
+
+    return new_job

@@ -858,3 +858,136 @@ class TestOrchestratorNoRedis:
             res = await session.execute(select(Job).where(Job.id == job_id))
             job = res.scalar_one()
             assert job.status == "completed"
+
+
+class TestOrchestratorCancellationPolling:
+    """Cancellation polling stops the pipeline between stages."""
+
+    async def test_cancelled_between_stages(
+        self, db_setup, redis_mock, llm_mock, job_config
+    ):
+        """If a job is cancelled mid-pipeline, subsequent stages are skipped."""
+        job_id = await _create_pending_job(db_setup, job_config)
+        mock_stages = _patch_stages()
+
+        orchestrator = PipelineOrchestrator(
+            session_factory=db_setup,
+            redis_client=redis_mock,
+            llm_client=llm_mock,
+        )
+
+        # After spider completes, cancel the job in DB
+        original_spider = mock_stages["spider"].process
+
+        async def spider_then_cancel(*args, **kwargs):
+            result = await original_spider(*args, **kwargs)
+            async with db_setup() as session:
+                res = await session.execute(select(Job).where(Job.id == job_id))
+                job = res.scalar_one()
+                job.status = "cancelled"
+                await session.commit()
+            return result
+
+        mock_stages["spider"].process = AsyncMock(side_effect=spider_then_cancel)
+
+        with patch.object(orchestrator, "_build_stages", return_value=mock_stages):
+            await orchestrator.run(job_id)
+
+        # Spider ran, but refiner and later stages were skipped
+        mock_stages["spider"].process.assert_awaited_once()
+        mock_stages["refiner"].process.assert_not_awaited()
+        mock_stages["factory"].process.assert_not_awaited()
+
+    async def test_normal_flow_unaffected(
+        self, db_setup, redis_mock, llm_mock, job_config
+    ):
+        """When no cancellation occurs, all stages run normally."""
+        job_id = await _create_pending_job(db_setup, job_config)
+        mock_stages = _patch_stages()
+
+        orchestrator = PipelineOrchestrator(
+            session_factory=db_setup,
+            redis_client=redis_mock,
+            llm_client=llm_mock,
+        )
+
+        with patch.object(orchestrator, "_build_stages", return_value=mock_stages):
+            await orchestrator.run(job_id)
+
+        # All 5 stages were called
+        for name in PipelineOrchestrator.STAGES:
+            assert mock_stages[name].process.await_count == 1
+
+        async with db_setup() as session:
+            res = await session.execute(select(Job).where(Job.id == job_id))
+            job = res.scalar_one()
+            assert job.status == "completed"
+
+
+class TestOrchestratorCostLimit:
+    """Cost limit check stops the pipeline when exceeded."""
+
+    async def test_cost_exceeded_marks_failed(
+        self, db_setup, redis_mock, llm_mock
+    ):
+        """If factory cost exceeds max_cost, job is marked failed."""
+        config = {
+            "urls": ["https://example.com"],
+            "scraping": {},
+            "processing": {},
+            "generation": {"template": "qa", "model": "gpt-4o-mini"},
+            "quality": {},
+            "export": {"format": "jsonl"},
+            "max_cost": 0.0001,  # Very low limit
+        }
+        job_id = await _create_pending_job(db_setup, config)
+        mock_stages = _patch_stages()
+
+        orchestrator = PipelineOrchestrator(
+            session_factory=db_setup,
+            redis_client=redis_mock,
+            llm_client=llm_mock,
+        )
+
+        with patch.object(orchestrator, "_build_stages", return_value=mock_stages):
+            await orchestrator.run(job_id)
+
+        async with db_setup() as session:
+            res = await session.execute(select(Job).where(Job.id == job_id))
+            job = res.scalar_one()
+            assert job.status == "failed"
+            assert "Cost limit exceeded" in job.error
+
+        # Inspector and shipper should NOT have run
+        mock_stages["inspector"].process.assert_not_awaited()
+        mock_stages["shipper"].process.assert_not_awaited()
+
+    async def test_cost_within_limit_passes(
+        self, db_setup, redis_mock, llm_mock
+    ):
+        """If factory cost is within max_cost, pipeline continues."""
+        config = {
+            "urls": ["https://example.com"],
+            "scraping": {},
+            "processing": {},
+            "generation": {"template": "qa", "model": "gpt-4o-mini"},
+            "quality": {},
+            "export": {"format": "jsonl"},
+            "max_cost": 1.0,  # Generous limit
+        }
+        job_id = await _create_pending_job(db_setup, config)
+        mock_stages = _patch_stages()
+
+        orchestrator = PipelineOrchestrator(
+            session_factory=db_setup,
+            redis_client=redis_mock,
+            llm_client=llm_mock,
+        )
+
+        with patch.object(orchestrator, "_build_stages", return_value=mock_stages):
+            await orchestrator.run(job_id)
+
+        async with db_setup() as session:
+            res = await session.execute(select(Job).where(Job.id == job_id))
+            job = res.scalar_one()
+            assert job.status == "completed"

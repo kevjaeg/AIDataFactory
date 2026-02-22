@@ -54,6 +54,8 @@ export const api = {
     }),
   cancelJob: (id: number) =>
     request<Job>(`/api/jobs/${id}/cancel`, { method: "POST" }),
+  retryJob: (id: number) =>
+    request<Job>(`/api/jobs/${id}/retry`, { method: "POST" }),
 
   // Exports
   getExports: (jobId: number) =>

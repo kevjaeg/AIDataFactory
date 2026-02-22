@@ -90,3 +90,67 @@ async def test_cancel_job(client: AsyncClient) -> None:
     response = await client.post(f"/api/jobs/{job_id}/cancel")
     assert response.status_code == 200
     assert response.json()["status"] == "cancelled"
+
+
+# ------------------------------------------------------------------
+# Retry endpoint tests
+# ------------------------------------------------------------------
+
+
+async def test_retry_failed_job(client: AsyncClient) -> None:
+    """Retrying a failed job creates a new pending job with the same config."""
+    project_resp = await client.post("/api/projects", json={"name": "Retry"})
+    project_id = project_resp.json()["id"]
+
+    job_resp = await client.post(f"/api/projects/{project_id}/jobs", json={
+        "urls": ["https://example.com/retry"],
+    })
+    job_id = job_resp.json()["id"]
+
+    # Cancel first to get it into a retryable state
+    await client.post(f"/api/jobs/{job_id}/cancel")
+
+    response = await client.post(f"/api/jobs/{job_id}/retry")
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == "pending"
+    assert data["project_id"] == project_id
+    assert data["id"] != job_id
+    assert "https://example.com/retry" in data["config"]["urls"]
+
+
+async def test_retry_cancelled_job(client: AsyncClient) -> None:
+    """Cancelled jobs should also be retryable."""
+    project_resp = await client.post("/api/projects", json={"name": "RetryCancelled"})
+    project_id = project_resp.json()["id"]
+
+    job_resp = await client.post(f"/api/projects/{project_id}/jobs", json={
+        "urls": ["https://example.com"],
+    })
+    job_id = job_resp.json()["id"]
+    await client.post(f"/api/jobs/{job_id}/cancel")
+
+    response = await client.post(f"/api/jobs/{job_id}/retry")
+    assert response.status_code == 201
+    assert response.json()["status"] == "pending"
+
+
+async def test_retry_completed_job_rejected(client: AsyncClient) -> None:
+    """Completed (non-failed) jobs cannot be retried."""
+    project_resp = await client.post("/api/projects", json={"name": "NoRetry"})
+    project_id = project_resp.json()["id"]
+
+    job_resp = await client.post(f"/api/projects/{project_id}/jobs", json={
+        "urls": ["https://example.com"],
+    })
+    job_id = job_resp.json()["id"]
+
+    # pending → not failed/cancelled, so retry should be rejected
+    response = await client.post(f"/api/jobs/{job_id}/retry")
+    assert response.status_code == 400
+
+
+async def test_retry_nonexistent_job(client: AsyncClient) -> None:
+    """Retrying a non-existent job returns 404."""
+    response = await client.post("/api/jobs/99999/retry")
+    assert response.status_code == 404
