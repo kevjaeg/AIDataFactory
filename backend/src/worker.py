@@ -33,7 +33,16 @@ class Worker:
         await init_db()
 
         # Import _session_factory after init_db populates it
-        from db.database import _session_factory
+        from db.database import _session_factory, get_async_session
+
+        # Load custom templates into registry
+        from templates import TemplateRegistry
+        try:
+            async with get_async_session() as session:
+                await TemplateRegistry.load_custom_templates(session)
+            logger.info("Custom templates loaded into registry")
+        except Exception as exc:
+            logger.warning(f"Failed to load custom templates: {exc}")
 
         # Initialize clients
         self._redis = RedisClient()
