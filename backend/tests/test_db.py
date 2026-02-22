@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from db.models import Base, Project, Job, RawDocument, Chunk, TrainingExample, Export
+from db.models import Base, Project, Job, RawDocument, Chunk, TrainingExample, Export, CustomTemplate
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ async def test_all_tables_created(engine) -> None:
         tables = await conn.run_sync(
             lambda sync_conn: inspect(sync_conn).get_table_names()
         )
-    expected = {"projects", "jobs", "raw_documents", "chunks", "training_examples", "exports"}
+    expected = {"projects", "jobs", "raw_documents", "chunks", "training_examples", "exports", "custom_templates"}
     assert expected == set(tables)
 
 

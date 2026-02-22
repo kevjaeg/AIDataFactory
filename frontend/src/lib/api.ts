@@ -6,6 +6,12 @@ import type {
   CostEntry,
   TemplateInfo,
   TemplateDetail,
+  HFPushRequest,
+  HFPushResponse,
+  CustomTemplate,
+  CustomTemplateCreate,
+  JobComparison,
+  SettingsResponse,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -68,4 +74,35 @@ export const api = {
   getTemplates: () => request<TemplateInfo[]>("/api/templates"),
   getTemplate: (type: string) =>
     request<TemplateDetail>(`/api/templates/${type}`),
+
+  // HuggingFace Push
+  pushToHuggingFace: (exportId: number, data: HFPushRequest) =>
+    request<HFPushResponse>(`/api/exports/${exportId}/push-to-hf`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // Custom Templates
+  getCustomTemplates: () => request<CustomTemplate[]>("/api/custom-templates"),
+  getCustomTemplate: (id: number) =>
+    request<CustomTemplate>(`/api/custom-templates/${id}`),
+  createCustomTemplate: (data: CustomTemplateCreate) =>
+    request<CustomTemplate>("/api/custom-templates", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateCustomTemplate: (id: number, data: Partial<CustomTemplateCreate>) =>
+    request<CustomTemplate>(`/api/custom-templates/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteCustomTemplate: (id: number) =>
+    request<void>(`/api/custom-templates/${id}`, { method: "DELETE" }),
+
+  // Job Comparison
+  compareJobs: (ids: number[]) =>
+    request<JobComparison>(`/api/jobs/compare?ids=${ids.join(",")}`),
+
+  // Settings
+  getSettings: () => request<SettingsResponse>("/api/settings"),
 };

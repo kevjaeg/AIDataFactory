@@ -106,3 +106,61 @@ class StatsOverview(BaseModel):
     active_jobs: int
     total_examples: int
     total_cost: float
+
+
+# --- HuggingFace Push ---
+
+class HFPushRequest(BaseModel):
+    repo_id: str = Field(..., min_length=1, description="HuggingFace repo ID (e.g. username/dataset-name)")
+    private: bool = False
+
+class HFPushResponse(BaseModel):
+    repo_id: str
+    url: str
+    files_uploaded: int
+
+
+# --- Custom Templates ---
+
+class CustomTemplateCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    template_type: str = Field(..., min_length=1, max_length=50)
+    system_prompt: str
+    user_prompt_template: str
+    output_schema: dict | None = None
+
+class CustomTemplateUpdate(BaseModel):
+    name: str | None = None
+    template_type: str | None = None
+    system_prompt: str | None = None
+    user_prompt_template: str | None = None
+    output_schema: dict | None = None
+
+class CustomTemplateResponse(BaseModel):
+    id: int
+    name: str
+    template_type: str
+    system_prompt: str
+    user_prompt_template: str
+    output_schema: dict | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# --- Job Comparison ---
+
+class JobComparisonItem(BaseModel):
+    job_id: int
+    status: str
+    template_type: str | None = None
+    total_examples: int
+    passed_examples: int
+    failed_examples: int
+    avg_quality_score: float
+    cost_total: float
+    pass_rate: float
+
+class JobComparison(BaseModel):
+    jobs: list[JobComparisonItem]

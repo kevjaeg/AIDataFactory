@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -19,6 +19,7 @@ import { GlassPanel } from "@/components/ui/glass-panel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
+import type { TemplateInfo } from "@/lib/types";
 
 const stageConfigs = [
   {
@@ -65,6 +66,12 @@ export default function NewJobPage({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
+  const [templates, setTemplates] = useState<TemplateInfo[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState("qa");
+
+  useEffect(() => {
+    api.getTemplates().then(setTemplates).catch(() => {});
+  }, []);
 
   const toggleStage = (key: string) => {
     setExpandedStages((prev) => {
@@ -95,7 +102,7 @@ export default function NewJobPage({
     try {
       const job = await api.createJob(projectId, {
         urls: urlList,
-        config: quickStart ? {} : undefined,
+        config: quickStart ? {} : { generation: { template: selectedTemplate } },
       });
       router.push(`/jobs/${job.id}`);
     } catch (err) {
@@ -142,6 +149,27 @@ export default function NewJobPage({
           Enter one URL per line. These will be scraped and processed through
           the pipeline.
         </p>
+      </GlassPanel>
+
+      {/* Template Selection */}
+      <GlassPanel>
+        <h2 className="mb-3 font-mono text-sm font-semibold uppercase tracking-wider text-[#00d4ff]">
+          Template
+        </h2>
+        <p className="mb-3 text-xs text-[#6b7280]">
+          Choose the prompt template for training data generation
+        </p>
+        <select
+          value={selectedTemplate}
+          onChange={(e) => setSelectedTemplate(e.target.value)}
+          className="w-full rounded-md border border-[rgba(0,212,255,0.2)] bg-[rgba(255,255,255,0.05)] px-3 py-2 font-mono text-sm text-[#e0e0e0] focus:border-[#00d4ff] focus:outline-none"
+        >
+          {templates.map((t) => (
+            <option key={t.name} value={t.name} className="bg-[#0a0a0f]">
+              {t.name} ({t.template_type})
+            </option>
+          ))}
+        </select>
       </GlassPanel>
 
       {/* Stage Configs (Accordion) */}

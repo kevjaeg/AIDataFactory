@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.schemas import JobCreate, JobResponse
+from api.schemas import JobCreate, JobResponse, JobComparison, JobComparisonItem
 from clients.redis_client import RedisClient
 from db.database import get_session
-from db.models import Job, Project
+from db.models import Job, Project, TrainingExample
 
 router = APIRouter(tags=["jobs"])
 
@@ -59,6 +61,74 @@ async def list_jobs(
         select(Job).where(Job.project_id == project_id).order_by(Job.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+@router.get("/api/jobs/compare", response_model=JobComparison)
+async def compare_jobs(
+    ids: str = Query(..., description="Comma-separated job IDs to compare"),
+    session: AsyncSession = Depends(get_session),
+) -> JobComparison:
+    """Compare quality metrics across multiple jobs."""
+    try:
+        job_ids = [int(x.strip()) for x in ids.split(",") if x.strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job IDs format. Use comma-separated integers.")
+
+    if len(job_ids) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 job IDs required for comparison")
+    if len(job_ids) > 10:
+        raise HTTPException(status_code=400, detail="Maximum 10 jobs can be compared at once")
+
+    items = []
+    for jid in job_ids:
+        job = await session.get(Job, jid)
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Job {jid} not found")
+
+        # Get example statistics
+        total_result = await session.execute(
+            select(func.count()).where(TrainingExample.job_id == jid)
+        )
+        total_examples = total_result.scalar() or 0
+
+        passed_result = await session.execute(
+            select(func.count()).where(
+                TrainingExample.job_id == jid,
+                TrainingExample.passed_qc == True,
+            )
+        )
+        passed_examples = passed_result.scalar() or 0
+
+        avg_score_result = await session.execute(
+            select(func.avg(TrainingExample.quality_score)).where(
+                TrainingExample.job_id == jid
+            )
+        )
+        avg_quality_score = avg_score_result.scalar() or 0.0
+
+        # Get template type from job config
+        template_type = None
+        if job.config and isinstance(job.config, dict):
+            gen_config = job.config.get("generation", {})
+            if isinstance(gen_config, dict):
+                template_type = gen_config.get("template")
+
+        failed_examples = total_examples - passed_examples
+        pass_rate = passed_examples / total_examples if total_examples > 0 else 0.0
+
+        items.append(JobComparisonItem(
+            job_id=jid,
+            status=job.status,
+            template_type=template_type,
+            total_examples=total_examples,
+            passed_examples=passed_examples,
+            failed_examples=failed_examples,
+            avg_quality_score=round(avg_quality_score, 4),
+            cost_total=job.cost_total,
+            pass_rate=round(pass_rate, 4),
+        ))
+
+    return JobComparison(jobs=items)
 
 
 @router.get("/api/jobs/{job_id}", response_model=JobResponse)

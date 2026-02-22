@@ -9,13 +9,15 @@ import {
   CheckCircle2,
   Loader2,
   Package,
+  Upload,
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/glass-panel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useJob } from "@/hooks/useJobs";
 import { api } from "@/lib/api";
-import type { Export } from "@/lib/types";
+import type { Export, HFPushResponse } from "@/lib/types";
 
 export default function JobResultsPage({
   params,
@@ -29,6 +31,14 @@ export default function JobResultsPage({
   const [loading, setLoading] = useState(true);
   const [datasetCard, setDatasetCard] = useState<string | null>(null);
   const [selectedExport, setSelectedExport] = useState<number | null>(null);
+
+  // HuggingFace push state
+  const [hfPushExport, setHfPushExport] = useState<number | null>(null);
+  const [hfRepoId, setHfRepoId] = useState("");
+  const [hfPrivate, setHfPrivate] = useState(false);
+  const [hfPushing, setHfPushing] = useState(false);
+  const [hfResult, setHfResult] = useState<HFPushResponse | null>(null);
+  const [hfError, setHfError] = useState<string | null>(null);
 
   useEffect(() => {
     api
@@ -53,6 +63,43 @@ export default function JobResultsPage({
     } catch {
       setDatasetCard("Failed to load dataset card.");
       setSelectedExport(exportId);
+    }
+  };
+
+  const handleToggleHfPush = (exportId: number) => {
+    if (hfPushExport === exportId) {
+      setHfPushExport(null);
+      setHfRepoId("");
+      setHfPrivate(false);
+      setHfResult(null);
+      setHfError(null);
+    } else {
+      setHfPushExport(exportId);
+      setHfRepoId("");
+      setHfPrivate(false);
+      setHfResult(null);
+      setHfError(null);
+    }
+  };
+
+  const handlePushToHF = async (exportId: number) => {
+    if (!hfRepoId.trim()) {
+      setHfError("Repository ID is required (e.g. username/dataset-name)");
+      return;
+    }
+    setHfPushing(true);
+    setHfError(null);
+    setHfResult(null);
+    try {
+      const result = await api.pushToHuggingFace(exportId, {
+        repo_id: hfRepoId.trim(),
+        private: hfPrivate,
+      });
+      setHfResult(result);
+    } catch (err) {
+      setHfError(err instanceof Error ? err.message : "Push to HuggingFace failed");
+    } finally {
+      setHfPushing(false);
     }
   };
 
@@ -158,6 +205,15 @@ export default function JobResultsPage({
                       <FileText className="size-4" />
                       Card
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleToggleHfPush(exp.id)}
+                      className="text-[#6b7280] hover:text-[#00d4ff] font-mono text-xs"
+                    >
+                      <Upload className="size-4" />
+                      Push to HF
+                    </Button>
                     <a
                       href={api.getDownloadUrl(exp.id)}
                       target="_blank"
@@ -183,6 +239,87 @@ export default function JobResultsPage({
                     <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs text-[#e0e0e0]/80">
                       {datasetCard}
                     </pre>
+                  </div>
+                )}
+
+                {/* HuggingFace Push Form */}
+                {hfPushExport === exp.id && (
+                  <div className="mt-2 rounded-md border border-[rgba(0,212,255,0.1)] bg-[rgba(255,255,255,0.02)] p-4 animate-fade-in">
+                    <h3 className="mb-3 font-mono text-xs font-semibold uppercase tracking-wider text-[#6b7280]">
+                      Push to HuggingFace
+                    </h3>
+
+                    {hfResult ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[#00ff88]">
+                          <CheckCircle2 className="size-4" />
+                          <span className="font-mono text-xs">
+                            Pushed {hfResult.files_uploaded} file(s) successfully
+                          </span>
+                        </div>
+                        <a
+                          href={hfResult.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 font-mono text-xs text-[#00d4ff] underline underline-offset-2 hover:text-[#00d4ff]/80"
+                        >
+                          {hfResult.url}
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="mb-1 block font-mono text-xs text-[#6b7280]">
+                            Repository ID
+                          </label>
+                          <Input
+                            value={hfRepoId}
+                            onChange={(e) => setHfRepoId(e.target.value)}
+                            placeholder="username/dataset-name"
+                            disabled={hfPushing}
+                            className="h-8 border-[rgba(0,212,255,0.2)] bg-[rgba(255,255,255,0.03)] font-mono text-xs text-[#e0e0e0] placeholder:text-[#6b7280]/60 focus-visible:border-[#00d4ff] focus-visible:ring-[#00d4ff]/20"
+                          />
+                        </div>
+
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={hfPrivate}
+                            onChange={(e) => setHfPrivate(e.target.checked)}
+                            disabled={hfPushing}
+                            className="size-3.5 rounded border-[rgba(0,212,255,0.3)] bg-transparent accent-[#00d4ff]"
+                          />
+                          <span className="font-mono text-xs text-[#6b7280]">
+                            Private repository
+                          </span>
+                        </label>
+
+                        {hfError && (
+                          <p className="font-mono text-xs text-red-400">
+                            {hfError}
+                          </p>
+                        )}
+
+                        <Button
+                          size="sm"
+                          onClick={() => handlePushToHF(exp.id)}
+                          disabled={hfPushing}
+                          className="bg-[#00d4ff] text-[#0a0a0f] hover:bg-[#00d4ff]/80 font-mono text-xs"
+                        >
+                          {hfPushing ? (
+                            <>
+                              <Loader2 className="size-3 animate-spin" />
+                              Pushing...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="size-3" />
+                              Push
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

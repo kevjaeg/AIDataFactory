@@ -12,6 +12,8 @@ from pipeline.quality_checks.toxicity import ToxicityChecker
 from pipeline.quality_checks.readability import ReadabilityChecker
 from pipeline.quality_checks.format_check import FormatChecker
 from pipeline.quality_checks.duplicate_check import DuplicateChecker
+from pipeline.quality_checks.coherence import CoherenceChecker
+from pipeline.quality_checks.length_balance import LengthBalanceChecker
 
 
 # Registry mapping config names to checker classes
@@ -20,6 +22,8 @@ _CHECKER_REGISTRY: dict[str, type[QualityChecker]] = {
     "readability": ReadabilityChecker,
     "format": FormatChecker,
     "duplicate": DuplicateChecker,
+    "coherence": CoherenceChecker,
+    "length_balance": LengthBalanceChecker,
 }
 
 
@@ -131,11 +135,6 @@ class InspectorStage(PipelineStage):
                 passed_count += 1
             else:
                 failed_count += 1
-                if idx < 3:  # Log first 3 failures for debugging
-                    logger.info(
-                        f"Example {idx} FAILED QC (score={quality_score:.3f}, "
-                        f"min={min_score}): {quality_details}"
-                    )
 
             # Build enriched example (preserving all original fields)
             enriched_example = {**example}

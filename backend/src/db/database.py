@@ -41,3 +41,14 @@ async def get_session() -> AsyncSession:
         raise RuntimeError("Database not initialized. Call init_db() first.")
     async with _session_factory() as session:
         yield session
+
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def get_async_session() -> AsyncSession:
+    """Get a database session as async context manager (for use outside FastAPI DI)."""
+    if _session_factory is None:
+        raise RuntimeError("Database not initialized. Call init_db() first.")
+    async with _session_factory() as session:
+        yield session

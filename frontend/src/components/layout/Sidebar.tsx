@@ -11,12 +11,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Factory,
+  FileCode2,
+  GitCompareArrows,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/projects", label: "Projects", icon: FolderKanban },
+  { href: "/templates", label: "Templates", icon: FileCode2 },
+  { href: "/jobs/compare", label: "Compare", icon: GitCompareArrows },
   { href: "/exports", label: "Exports", icon: Download },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

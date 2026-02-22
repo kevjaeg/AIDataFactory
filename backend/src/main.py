@@ -8,7 +8,7 @@ from loguru import logger
 from config import get_settings
 from logging_config import setup_logging
 from db.database import init_db, close_db
-from api.routes import health, projects, jobs, exports, stream, stats, templates_api
+from api.routes import health, projects, jobs, exports, stream, stats, templates_api, custom_templates, settings
 
 
 @asynccontextmanager
@@ -26,6 +26,16 @@ async def lifespan(app: FastAPI):
     # Initialize database
     await init_db()
     logger.info("Database initialized")
+
+    # Load custom templates into registry
+    from db.database import get_async_session
+    from templates import TemplateRegistry
+    try:
+        async with get_async_session() as session:
+            await TemplateRegistry.load_custom_templates(session)
+        logger.info("Custom templates loaded into registry")
+    except Exception as exc:
+        logger.warning(f"Failed to load custom templates: {exc}")
 
     yield
 
@@ -57,3 +67,5 @@ app.include_router(exports.router)
 app.include_router(stream.router)
 app.include_router(stats.router)
 app.include_router(templates_api.router)
+app.include_router(custom_templates.router)
+app.include_router(settings.router)

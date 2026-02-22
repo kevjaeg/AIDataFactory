@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # Export defaults
     export_format: str = "jsonl"
 
+    # HuggingFace
+    huggingface_token: str = ""
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
