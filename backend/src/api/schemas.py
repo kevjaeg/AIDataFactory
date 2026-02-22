@@ -1,6 +1,8 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+from config import get_settings
+
 
 # --- Config Sub-Schemas ---
 
@@ -17,7 +19,7 @@ class ProcessingConfig(BaseModel):
 
 class GenerationConfig(BaseModel):
     template: str = "qa"
-    model: str = "gpt-4o-mini"
+    model: str = Field(default_factory=lambda: get_settings().generation_model)
     examples_per_chunk: int = 3
     max_concurrent_llm: int = 5
 

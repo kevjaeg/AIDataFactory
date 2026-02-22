@@ -79,7 +79,7 @@ class ShipperStage(PipelineStage):
         passed_examples: list[dict] = []
         filtered_out = 0
         for example in input_data:
-            if "passed_qc" not in example or example["passed_qc"] is True:
+            if "passed_qc" not in example or example["passed_qc"]:
                 passed_examples.append(example)
             else:
                 filtered_out += 1

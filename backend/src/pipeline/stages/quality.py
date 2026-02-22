@@ -120,17 +120,22 @@ class InspectorStage(PipelineStage):
                     weighted_scores.append((0.0, weight))
 
             total_weight = sum(w for _, w in weighted_scores)
-            quality_score = (
+            quality_score = float(
                 sum(s * w for s, w in weighted_scores) / total_weight
                 if total_weight > 0
                 else 0.0
             )
-            passed_qc = quality_score >= min_score
+            passed_qc = bool(quality_score >= min_score)
 
             if passed_qc:
                 passed_count += 1
             else:
                 failed_count += 1
+                if idx < 3:  # Log first 3 failures for debugging
+                    logger.info(
+                        f"Example {idx} FAILED QC (score={quality_score:.3f}, "
+                        f"min={min_score}): {quality_details}"
+                    )
 
             # Build enriched example (preserving all original fields)
             enriched_example = {**example}

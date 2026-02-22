@@ -70,11 +70,14 @@ class PromptTemplate(ABC):
         objects or a single JSON **object**.  Each object should contain
         ``input`` and ``output`` keys.
 
+        Handles responses wrapped in markdown code blocks (e.g. ```json ... ```).
+
         Returns a list of dicts: ``[{"input": "...", "output": "..."}, ...]``.
         An empty list is returned when the response cannot be parsed.
         """
+        text = self._extract_json(response)
         try:
-            data = json.loads(response)
+            data = json.loads(text)
             if isinstance(data, list):
                 return [
                     {"input": str(item.get("input", "")), "output": str(item.get("output", ""))}
@@ -86,3 +89,17 @@ class PromptTemplate(ABC):
         except json.JSONDecodeError:
             return []
         return []
+
+    @staticmethod
+    def _extract_json(text: str) -> str:
+        """Strip markdown code fences from LLM responses."""
+        stripped = text.strip()
+        if stripped.startswith("```"):
+            # Remove opening fence (```json or ```)
+            first_newline = stripped.find("\n")
+            if first_newline != -1:
+                stripped = stripped[first_newline + 1:]
+            # Remove closing fence
+            if stripped.rstrip().endswith("```"):
+                stripped = stripped.rstrip()[:-3]
+        return stripped.strip()
