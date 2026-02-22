@@ -8,7 +8,7 @@ from loguru import logger
 from config import get_settings
 from logging_config import setup_logging
 from db.database import init_db, close_db
-from api.routes import health, projects, jobs, exports
+from api.routes import health, projects, jobs, exports, stream, stats, templates_api
 
 
 @asynccontextmanager
@@ -54,3 +54,6 @@ app.include_router(health.router)
 app.include_router(projects.router)
 app.include_router(jobs.router)
 app.include_router(exports.router)
+app.include_router(stream.router)
+app.include_router(stats.router)
+app.include_router(templates_api.router)
