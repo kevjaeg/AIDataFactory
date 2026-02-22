@@ -11,14 +11,15 @@ venv/
 .env.local
 
 # Data
+data/
 backend/data/raw/
 backend/data/processed/
 backend/data/generated/
 backend/data/exports/
 backend/data/logs/
-db/*.db
-db/*.db-wal
-db/*.db-shm
+*.db
+*.db-wal
+*.db-shm
 
 # IDE
 .vscode/
@@ -37,3 +38,7 @@ docker-compose.override.yml
 
 # Firebase
 firebase-debug.log
+
+# Screenshots / temp images
+*.png
+*.jpg
