@@ -18,10 +18,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:///app/db/factory.db
+      - DATABASE_URL=sqlite+aiosqlite:///db/factory.db
       - REDIS_URL=redis://redis:6379/0
     env_file:
-      - .env
+      - path: .env
+        required: false
     volumes:
       - app-data:/app/data
       - app-db:/app/db
@@ -35,10 +36,11 @@ services:
       dockerfile: Dockerfile
     command: ["python", "-m", "worker"]
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:///app/db/factory.db
+      - DATABASE_URL=sqlite+aiosqlite:///db/factory.db
       - REDIS_URL=redis://redis:6379/0
     env_file:
-      - .env
+      - path: .env
+        required: false
     volumes:
       - app-data:/app/data
       - app-db:/app/db
